@@ -1,3 +1,4 @@
+require('dotenv').config();
 import { app, io, server } from './app';
 import router from './router';
 import socket from './socket';
@@ -21,7 +22,7 @@ client.get('table', function (err, reply) {
   }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 8181;
 
 server.listen(PORT, () => {
   logger('⚡️ [server]', `Server is running at https://localhost:${PORT}`, {
