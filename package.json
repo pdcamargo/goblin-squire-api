@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon src/index.ts",
     "build": "rimraf ./dist && tsc",
-    "start": "npm run build && node dist/src/index.js"
+    "start": "npm run build && pm2 restart goblin-squire"
   },
   "dependencies": {
     "body-parser": "^1.19.0",
