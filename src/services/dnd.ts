@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { v4 } from 'uuid';
 
 import {
   CharacterSkill,
@@ -46,7 +47,7 @@ export const getDatabase = () => {
 
 export const database = getDatabase();
 
-export const createDefaultCharacter = (userId: string): Character => {
+export const createDefaultCharacter = (): Character => {
   const skills = database.skills;
   const abilities = database['ability-scores'];
 
@@ -56,7 +57,7 @@ export const createDefaultCharacter = (userId: string): Character => {
 
   for (let skill of skills) {
     charSkills.push({
-      proficient: true,
+      proficient: false,
       skill: skill.index,
       ability_score: null,
     });
@@ -65,7 +66,7 @@ export const createDefaultCharacter = (userId: string): Character => {
   for (let ability of abilities) {
     charSavingThrows.push({
       ability_score: ability.index,
-      proficient: true,
+      proficient: false,
     });
 
     charAbilityScores.push({
@@ -75,11 +76,12 @@ export const createDefaultCharacter = (userId: string): Character => {
   }
 
   return {
-    userId,
+    id: v4(),
+    userId: '',
     level: 1,
     bio: {
       age: null,
-      name: 'Character ' + userId,
+      name: 'Character ' + Math.random(),
     },
     classes: [],
     race: null,

@@ -25,7 +25,7 @@ type Logger = (
   description: string,
   config?: {
     bg?: BgColor;
-    color?: BgColor;
+    color?: Color;
   }
 ) => void;
 

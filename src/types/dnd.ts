@@ -324,6 +324,7 @@ export type CharacterAbilityScore = {
 };
 
 export type Character = {
+  id: string;
   userId: string;
   level: number;
   bio: CharacterBio;

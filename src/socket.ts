@@ -1,128 +1,79 @@
 import { Server, Socket } from 'socket.io';
 
 import { logger } from './utils';
-import { database, createDefaultCharacter } from './services/dnd';
+import { database } from './services/dnd';
 import { Character } from './types/dnd';
+
+import tableService, { IUser, IGameTable } from './services/table';
 
 type SetupProps = {
   tableId: string;
   userId: string;
 };
 
-type User = {
-  id: string;
-  socket: string;
+type UpdateCharacterProps = {
+  tableId: string;
+  characterId: string;
+  newValues: Partial<Character>;
 };
 
-type Table = {
-  id: string;
-  users: User[];
-  characters: Character[];
-  database: typeof database;
+type CreateCharacterProps = {
+  tableId: string;
 };
 
-const tables: Table[] = [];
-
-const findTableIndex = (id: string) => tables.findIndex((t) => t.id === id);
-const hasTable = (id: string) => findTableIndex(id) >= 0;
-const getTable = (id: string) => tables.find((t) => t.id === id);
-const emitCurrentUsers = (socket: Socket, tableId: string, users: User[]) => {
-  socket.to(`table:${tableId}`).emit('currentUsers', users);
-};
-const emitCharacters = (
-  socket: Socket,
-  tableId: string,
-  characters: Character[]
-) => {
-  socket.to(`table:${tableId}`).emit('characters', characters);
-};
-const addUserToTable = (id: string, userId: string, socket: Socket) => {
-  if (hasTable(id)) {
-    const tableIndex = findTableIndex(id);
-    let table = tables[tableIndex];
-
-    const hasCharacter =
-      table.characters.find((c) => c.userId === userId) !== undefined;
-    const newCharacter = createDefaultCharacter(userId);
-
-    table = {
-      ...table,
-      users: [
-        ...table.users.filter((u) => u.id !== userId),
-        { id: userId, socket: socket.id },
-      ],
-    };
-
-    if (!hasCharacter) {
-      table.characters.push(newCharacter);
-    }
-
-    emitCurrentUsers(socket, table.id, table.users);
-    emitCharacters(socket, table.id, table.characters);
-
-    tables[tableIndex] = table;
-  }
-};
-
-const removeSocketFromTable = (socket: Socket) => {
-  const index = tables.findIndex((t) =>
-    t.users.find((u) => u.socket === socket.id)
-  );
-
-  if (index >= 0) {
-    let table = tables[index];
-    const users = table.users.filter((u) => u.socket !== socket.id);
-    table.users = users;
-
-    tables[index] = table;
-
-    emitCurrentUsers(socket, table.id, users);
-  }
-};
-
+const CURRENT_CHARACTERS = 'currentCharacters';
+const CURRENT_USERS = 'currentUsers';
 const socket = (io: Server) => {
   io.on('connection', (socket) => {
-    logger('⚡️ [socket.io]', 'connection with id of ' + socket.id);
+    // logger('⚡️ [socket.io]', 'connection with id of ' + socket.id);
 
-    socket.on('startTable', ({ tableId, userId }: SetupProps) => {
-      logger(
-        '⚡️ [socket.io]',
-        `starting table of id ${tableId} and user of id ${userId}`
-      );
-
+    socket.on('startTable', async ({ tableId, userId }: SetupProps) => {
       socket.join(`table:${tableId}`);
       socket.join(`user:${userId}`);
+      (socket as any).tableId = tableId;
+      (socket as any).userId = userId;
 
-      if (!hasTable(tableId)) {
-        tables.push({
-          id: tableId,
-          characters: [createDefaultCharacter(userId)],
-          users: [
-            {
-              id: userId,
-              socket: socket.id,
-            },
-          ],
-          database,
-        });
-      } else {
-        addUserToTable(tableId, userId, socket);
-      }
+      const table = await tableService.connect(tableId, userId, socket.id);
 
-      const table = getTable(tableId);
-      logger(
-        '⚡️ [socket.io]',
-        `table settled with users ${table?.users.join(', ')}`,
-        { bg: 'bgWhite' }
-      );
-      socket.emit(`setupTable:${tableId}`, table);
-      console.log(table?.users);
+      io.in(`table:${tableId}`).emit(CURRENT_USERS, table.users);
+
+      socket.emit(`setupTable:${tableId}`, {
+        ...table,
+        database,
+      });
     });
 
-    socket.on('disconnect', () => {
-      logger('⚡️ [socket.io]', 'disconnection', { bg: 'bgMagenta' });
+    socket.on(
+      'updateCharacter',
+      async ({ tableId, characterId, newValues }: UpdateCharacterProps) => {
+        const table = await tableService.updateCharacter(
+          tableId,
+          characterId,
+          newValues
+        );
 
-      removeSocketFromTable(socket);
+        socket
+          .in(`table:${tableId}`)
+          .emit(CURRENT_CHARACTERS, table.characters);
+      }
+    );
+
+    socket.on('createCharacter', async ({ tableId }: CreateCharacterProps) => {
+      const table = await tableService.createCharacter(tableId);
+
+      io.in(`table:${tableId}`).emit(CURRENT_CHARACTERS, table.characters);
+    });
+
+    socket.on('disconnect', async () => {
+      // logger('⚡️ [socket.io]', 'disconnection', { bg: 'bgMagenta' });
+      const tableId = (socket as any).tableId;
+      const userId = (socket as any).userId;
+
+      if (tableId && userId) {
+        const table = await tableService.disconnect(tableId, userId);
+
+        io.in(`table:${tableId}`).emit(CURRENT_USERS, table.users);
+      }
     });
   });
 };
